@@ -5,6 +5,9 @@ import '@/styles/globals.css';
 export const metadata: Metadata = {
   title: 'ZTOI Tech Internship',
   description: 'Launch your tech career with ZTOI Tech\'s free online internship program. Get real projects, mentorship, and an industry certificate.',
+  icons: {
+    icon: '/assets/logo.png',
+  },
 };
 
 export default function RootLayout({
