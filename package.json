@@ -1,12 +1,14 @@
 {
-  "name": "ztoi-nextjs",
+  "name": "ztoiinternship",
   "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "next dev -p 3001",
     "build": "next build",
     "start": "next start -p 3001",
-    "lint": "next lint"
+    "lint": "next lint",
+    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview"
   },
   "dependencies": {
     "@dr.pogodin/react-helmet": "^3.0.5",
