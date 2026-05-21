@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { pool } from '@/lib/db/client';
 import { getAdminId } from '@/lib/utils/auth';
 import { RowDataPacket } from 'mysql2';
+import { formatShortDate } from '@/lib/utils/date';
 
 export default async function (req: Request, res: Response) {
     try {
@@ -27,14 +28,6 @@ export default async function (req: Request, res: Response) {
             JOIN internship_domains d ON s.domain_id = d.id
             ORDER BY s.registered_at DESC
         `);
-
-        const formatShortDate = (ms: number) => {
-            if (!ms) return null;
-            const d = new Date(ms);
-            const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-            const pad = (n: number) => n.toString().padStart(2, '0');
-            return `${months[d.getMonth()]} ${pad(d.getDate())}, ${d.getFullYear()}`;
-        };
 
         const students = (rows as RowDataPacket[]).map(r => ({
             ...r,

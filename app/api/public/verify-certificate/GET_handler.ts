@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { pool } from '@/lib/db/client';
 import { RowDataPacket } from 'mysql2';
+import { formatLongDate } from '@/lib/utils/date';
 
 export default async function (req: Request, res: Response) {
     try {
@@ -31,21 +32,13 @@ export default async function (req: Request, res: Response) {
 
         const cert = certRows[0];
 
-        const formatDate = (ms: number) => {
-            if (!ms) return null;
-            const d = new Date(ms);
-            const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-            const pad = (n: number) => n.toString().padStart(2, '0');
-            return `${pad(d.getDate())} ${months[d.getMonth()]} ${d.getFullYear()}`;
-        };
-
         return res.status(200).json({
             valid: true,
             cert_number: cert.cert_number,
             student_name: cert.student_name,
             student_email: cert.student_email,
             domain: cert.domain,
-            issued_at: formatDate(Number(cert.issued_at_ms)),
+            issued_at: formatLongDate(Number(cert.issued_at_ms)),
         });
     } catch (error) {
         console.error('Error verifying certificate:', error);

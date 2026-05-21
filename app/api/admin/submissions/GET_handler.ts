@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { pool } from '@/lib/db/client';
 import { getAdminId } from '@/lib/utils/auth';
 import { RowDataPacket } from 'mysql2';
+import { formatDateWithTime } from '@/lib/utils/date';
 
 export default async function (req: Request, res: Response) {
     try {
@@ -27,17 +28,9 @@ export default async function (req: Request, res: Response) {
             ORDER BY sub.submitted_at DESC
         `);
 
-        const formatDate = (ms: number) => {
-            if (!ms) return null;
-            const d = new Date(ms);
-            const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-            const pad = (n: number) => n.toString().padStart(2, '0');
-            return `${months[d.getMonth()]} ${pad(d.getDate())}, ${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-        };
-
         const submissions = rows.map(r => ({
             ...r,
-            submittedAt: formatDate(Number(r.submittedAtMs))
+            submittedAt: formatDateWithTime(Number(r.submittedAtMs))
         }));
 
         return res.status(200).json({ submissions });

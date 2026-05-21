@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { pool } from '@/lib/db/client';
 import { getAdminId } from '@/lib/utils/auth';
 import { RowDataPacket } from 'mysql2';
+import { formatShortDate } from '@/lib/utils/date';
 
 export default async function (req: Request, res: Response) {
     try {
@@ -62,22 +63,14 @@ export default async function (req: Request, res: Response) {
             LIMIT 5
         `);
 
-        const formatDate = (ms: number) => {
-            if (!ms) return null;
-            const d = new Date(ms);
-            const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-            const pad = (n: number) => n.toString().padStart(2, '0');
-            return `${months[d.getMonth()]} ${pad(d.getDate())}, ${d.getFullYear()}`;
-        };
-
         const formattedRecentPayments = recentPayments.map(p => ({
             ...p,
-            submittedAt: formatDate(Number(p.submittedAtMs))
+            submittedAt: formatShortDate(Number(p.submittedAtMs))
         }));
 
         const formattedRecentStudents = recentStudents.map(s => ({
             ...s,
-            registeredAt: formatDate(Number(s.registeredAtMs))
+            registeredAt: formatShortDate(Number(s.registeredAtMs))
         }));
 
         return res.json({
