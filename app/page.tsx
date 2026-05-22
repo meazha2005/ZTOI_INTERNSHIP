@@ -229,9 +229,6 @@ export default function LandingPage() {
                 className="p-8 rounded-xl border border-white/10 transition-all duration-300 group"
                 style={{ background: '#161616' }}
               >
-                <div className="w-14 h-14 rounded-xl flex items-center justify-center mb-6" style={{ background: `${BRAND}20` }}>
-                  <Globe size={28} style={{ color: BRAND }} />
-                </div>
                 <h3 className="text-xl font-bold text-white mb-3" style={{ fontFamily: 'var(--font-michroma)' }}>{d.name}</h3>
                 <p className="text-white/50 text-sm leading-relaxed mb-6">{d.description}</p>
                 <div className="flex flex-wrap gap-2 mb-8">
