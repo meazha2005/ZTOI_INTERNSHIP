@@ -326,7 +326,7 @@ export default function LandingPage() {
           >
             {/* Professional Certificate */}
             <div 
-              className="bg-white rounded-2xl shadow-2xl overflow-hidden"
+              className="hidden sm:block bg-white rounded-2xl shadow-2xl overflow-hidden"
               style={{ aspectRatio: '1.3', maxWidth: '100%', margin: '0 auto' }}
             >
               <div style={{
