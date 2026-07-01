@@ -309,18 +309,32 @@ function ComposeEmailModal({ student, onClose, onSuccess }: ComposeModalProps) {
         body: formData
       });
 
-      const data = await response.json();
+      let errorMessage = '';
+      let success = false;
 
-      if (response.ok && data.success) {
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const data = await response.json();
+        if (response.ok && data.success) {
+          success = true;
+        } else {
+          errorMessage = data.error || 'Failed to send email.';
+        }
+      } else {
+        const text = await response.text();
+        errorMessage = `Server Error (${response.status}): ${text.substring(0, 100)}`;
+      }
+
+      if (success) {
         toast.success(`Completion email sent successfully to ${student.name}!`);
         onSuccess();
         onClose();
       } else {
-        toast.error(data.error || 'Failed to send email.');
+        toast.error(errorMessage || 'Failed to send email.');
       }
     } catch (err) {
-      console.error(err);
-      toast.error('An error occurred while sending the email.');
+      console.error('Send email error:', err);
+      toast.error(err instanceof Error ? `Connection Error: ${err.message}` : 'An error occurred while sending the email.');
     } finally {
       setSending(false);
     }
