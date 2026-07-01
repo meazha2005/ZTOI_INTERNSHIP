@@ -10,6 +10,7 @@ import {
   ClipboardList,
   MessageSquare,
   CreditCard,
+  Mail,
   LogOut,
   Menu,
   Shield,
@@ -25,6 +26,7 @@ const navItems = [
   { label: 'Tasks', icon: ClipboardList, path: '/admin/tasks' },
   { label: 'Chat', icon: MessageSquare, path: '/admin/chat' },
   { label: 'Payments', icon: CreditCard, path: '/admin/payments' },
+  { label: 'Emails', icon: Mail, path: '/admin/emails' },
 ];
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
