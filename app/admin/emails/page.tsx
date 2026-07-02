@@ -16,10 +16,12 @@ import {
   FileText,
   CheckCircle2,
   XCircle,
-  Paperclip
+  Paperclip,
+  Trash2
 } from 'lucide-react';
 import AdminLayout from '@/layouts/AdminLayout';
 import { toast } from 'sonner';
+import { upload } from '@vercel/blob/client';
 
 interface Student {
   id: number;
@@ -49,7 +51,8 @@ function generateEmailHtml({
   project,
   personalNote,
   portalUrl,
-  certificateNumber
+  certificateNumber,
+  attachments
 }: {
   name: string;
   domain: string;
@@ -57,6 +60,7 @@ function generateEmailHtml({
   personalNote: string;
   portalUrl: string;
   certificateNumber: string;
+  attachments: Array<{ filename: string; url: string }>;
 }) {
   const personalNoteHtml = personalNote.trim()
     ? `<div style="margin: 20px 0; padding: 18px; background-color: #FFF9F5; border-left: 3px solid #ff4d00; border-radius: 6px; font-style: italic; color: #555555; font-size: 14px; line-height: 1.6;">
@@ -94,6 +98,27 @@ function generateEmailHtml({
             Verify Internship Certificate Authenticity Online
           </a>
         </p>
+      </div>
+    `;
+  }
+
+  // Attachments HTML section
+  let attachmentsHtml = '';
+  if (attachments && attachments.length > 0) {
+    attachmentsHtml = `
+      <div style="margin: 25px 0 10px 0; padding: 18px; border: 1px solid #eef0f3; border-radius: 8px; background-color: #fafbfc;">
+        <h4 style="margin: 0 0 10px 0; font-size: 13px; font-weight: 700; color: #111111; text-transform: uppercase; tracking-wider;">
+          Attachments included (${attachments.length}):
+        </h4>
+        <ul style="margin: 0; padding-left: 20px; font-size: 13px; color: #555555; line-height: 1.6;">
+          ${attachments.map(att => `
+            <li style="margin-bottom: 5px;">
+              <a href="${att.url}" style="color: #ff4d00; text-decoration: underline; font-weight: 600;" target="_blank">
+                ${att.filename}
+              </a>
+            </li>
+          `).join('')}
+        </ul>
       </div>
     `;
   }
@@ -242,6 +267,8 @@ function generateEmailHtml({
       
       ${verificationHtml}
       
+      ${attachmentsHtml}
+      
       <div class="btn-container">
         <a href="${portalUrl}" class="btn" target="_blank">Go to Student Portal</a>
       </div>
@@ -265,16 +292,15 @@ interface ComposeModalProps {
   onClose: () => void;
   onSuccess: () => void;
 }
-
 function ComposeEmailModal({ student, onClose, onSuccess }: ComposeModalProps) {
   const [subject, setSubject] = useState(`ZTOI TECH - Internship Completion & Congratulations!`);
   const [customName, setCustomName] = useState(student.name);
   const [projectName, setProjectName] = useState(student.completedProjects || 'Assigned Internship Tasks');
   const [certId, setCertId] = useState(student.certificateNumber || '');
-  const [attachment, setAttachment] = useState<File | null>(null);
   const [personalNote, setPersonalNote] = useState('');
   const [activeTab, setActiveTab] = useState<'edit' | 'preview'>('edit');
   const [sending, setSending] = useState(false);
+  const [attachments, setAttachments] = useState<Array<{ id: string; filename: string; url: string; size: number; status: 'uploading' | 'uploaded' | 'error' }>>([]);
 
   const [portalUrl, setPortalUrl] = useState('http://localhost:3001/login');
 
@@ -284,57 +310,104 @@ function ComposeEmailModal({ student, onClose, onSuccess }: ComposeModalProps) {
     }
   }, []);
 
+  const formatSize = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const newFiles = Array.from(files);
+
+    for (const file of newFiles) {
+      const tempId = Date.now().toString() + Math.random().toString(36).substr(2, 9);
+      const newAttachment = {
+        id: tempId,
+        filename: file.name,
+        url: '',
+        size: file.size,
+        status: 'uploading' as const
+      };
+
+      setAttachments(prev => [...prev, newAttachment]);
+
+      try {
+        const blob = await upload(file.name, file, {
+          access: 'public',
+          handleUploadUrl: '/api/admin/emails/upload',
+        });
+
+        setAttachments(prev => prev.map(att =>
+          att.id === tempId
+            ? { ...att, url: blob.url, status: 'uploaded' as const }
+            : att
+        ));
+        toast.success(`Uploaded ${file.name} successfully!`);
+      } catch (err) {
+        console.error('Upload error:', err);
+        setAttachments(prev => prev.map(att =>
+          att.id === tempId
+            ? { ...att, status: 'error' as const }
+            : att
+        ));
+        toast.error(`Failed to upload ${file.name}`);
+      }
+    }
+
+    if (e.target) {
+      e.target.value = '';
+    }
+  };
+
+  const handleRemoveAttachment = (id: string) => {
+    setAttachments(prev => prev.filter(att => att.id !== id));
+  };
+
   const emailBodyHtml = generateEmailHtml({
     name: customName,
     domain: student.domain,
     project: projectName,
     personalNote,
     portalUrl,
-    certificateNumber: certId
+    certificateNumber: certId,
+    attachments: attachments
+      .filter(att => att.status === 'uploaded')
+      .map(att => ({ filename: att.filename, url: att.url }))
   });
 
   const handleSend = async () => {
     setSending(true);
     try {
-      const formData = new FormData();
-      formData.append('studentId', String(student.id));
-      formData.append('emailSubject', subject);
-      formData.append('emailBody', emailBodyHtml);
-      if (attachment) {
-        formData.append('file', attachment);
-      }
-
       const response = await fetch('/api/admin/emails/send', {
         method: 'POST',
-        body: formData
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          studentId: student.id,
+          emailSubject: subject,
+          emailBody: emailBodyHtml,
+          attachments: attachments
+            .filter(att => att.status === 'uploaded')
+            .map(att => ({ filename: att.filename, url: att.url }))
+        })
       });
 
-      let errorMessage = '';
-      let success = false;
+      const data = await response.json();
 
-      const contentType = response.headers.get('content-type') || '';
-      if (contentType.includes('application/json')) {
-        const data = await response.json();
-        if (response.ok && data.success) {
-          success = true;
-        } else {
-          errorMessage = data.error || 'Failed to send email.';
-        }
-      } else {
-        const text = await response.text();
-        errorMessage = `Server Error (${response.status}): ${text.substring(0, 100)}`;
-      }
-
-      if (success) {
+      if (response.ok && data.success) {
         toast.success(`Completion email sent successfully to ${student.name}!`);
         onSuccess();
         onClose();
       } else {
-        toast.error(errorMessage || 'Failed to send email.');
+        toast.error(data.error || 'Failed to send email.');
       }
     } catch (err) {
-      console.error('Send email error:', err);
-      toast.error(err instanceof Error ? `Connection Error: ${err.message}` : 'An error occurred while sending the email.');
+      console.error(err);
+      toast.error('An error occurred while sending the email.');
     } finally {
       setSending(false);
     }
@@ -372,13 +445,13 @@ function ComposeEmailModal({ student, onClose, onSuccess }: ComposeModalProps) {
             <div className="flex border border-gray-200 rounded-lg overflow-hidden text-xs font-semibold">
               <button 
                 onClick={() => setActiveTab('edit')} 
-                className={`flex-1 py-2 text-center transition-all ${activeTab === 'edit' ? 'bg-orange-500 text-white' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'}`}
+                className={`flex-1 py-2 text-center transition-all ${activeTab === 'edit' ? 'bg-orange-500 text-white' : 'bg-gray-55 text-gray-600 hover:bg-gray-100'}`}
               >
                 Edit Details
               </button>
               <button 
                 onClick={() => setActiveTab('preview')} 
-                className={`flex-1 py-2 text-center transition-all ${activeTab === 'preview' ? 'bg-orange-500 text-white' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'}`}
+                className={`flex-1 py-2 text-center transition-all ${activeTab === 'preview' ? 'bg-orange-500 text-white' : 'bg-gray-55 text-gray-600 hover:bg-gray-100'}`}
               >
                 Live Preview
               </button>
@@ -392,7 +465,7 @@ function ComposeEmailModal({ student, onClose, onSuccess }: ComposeModalProps) {
                     type="text"
                     value={student.email}
                     disabled
-                    className="w-full px-3 py-2.5 rounded-lg border border-gray-200 bg-gray-50 text-sm text-gray-500 cursor-not-allowed focus:outline-none"
+                    className="w-full px-3 py-2.5 rounded-lg border border-gray-200 bg-gray-55 text-sm text-gray-500 cursor-not-allowed focus:outline-none"
                   />
                 </div>
 
@@ -408,7 +481,7 @@ function ComposeEmailModal({ student, onClose, onSuccess }: ComposeModalProps) {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Student Name (as written in mail)</label>
+                  <label className="block text-xs font-bold text-gray-550 uppercase tracking-wider mb-1.5">Student Name (as written in mail)</label>
                   <input
                     type="text"
                     value={customName}
@@ -443,50 +516,84 @@ function ComposeEmailModal({ student, onClose, onSuccess }: ComposeModalProps) {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Email Attachment (Optional)</label>
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="file"
-                      onChange={(e) => {
-                        if (e.target.files && e.target.files[0]) {
-                          setAttachment(e.target.files[0]);
-                        }
-                      }}
-                      className="hidden"
-                      id="email-attachment-file"
-                    />
-                    <label
-                      htmlFor="email-attachment-file"
-                      className="px-4 py-2 text-xs font-semibold text-gray-700 bg-gray-50 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors flex items-center gap-1.5"
-                    >
-                      <Paperclip size={13} />
-                      {attachment ? 'Change File' : 'Choose File'}
-                    </label>
-                    {attachment && (
-                      <div className="flex items-center gap-1.5 bg-orange-50 border border-orange-100 px-3 py-1.5 rounded-lg text-xs font-semibold text-orange-600">
-                        <span className="max-w-[130px] truncate">{attachment.name}</span>
-                        <button
-                          type="button"
-                          onClick={() => setAttachment(null)}
-                          className="hover:text-orange-800 transition-colors"
-                        >
-                          <X size={13} />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                  <p className="text-[10px] text-gray-400 mt-1">Select a document, PDF, or archive to attach to this email.</p>
-                </div>
-
-                <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Personal Note (Optional)</label>
                   <textarea
                     value={personalNote}
                     onChange={(e) => setPersonalNote(e.target.value)}
                     placeholder="Add a personalized note or feedback here. It will be styled inside a special quote box in the email."
-                    rows={4}
+                    rows={3}
                     className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 resize-none"
                   />
+                </div>
+
+                {/* File Attachments Section */}
+                <div className="border-t border-gray-100 pt-4">
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1">
+                    <Paperclip size={14} className="text-gray-400" />
+                    Attachments (Max 25MB total recommended)
+                  </label>
+                  
+                  <div className="flex items-center gap-3 mb-3">
+                    <label className="flex items-center gap-2 px-4 py-2 border border-dashed border-gray-300 rounded-lg text-xs font-semibold text-gray-600 cursor-pointer hover:bg-gray-50 hover:border-gray-400 transition-colors w-full justify-center">
+                      <Paperclip size={14} />
+                      Choose File to Attach
+                      <input
+                        type="file"
+                        multiple
+                        onChange={handleFileChange}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+
+                  {attachments.length > 0 && (
+                    <div className="flex flex-col gap-2 bg-gray-50 p-2.5 rounded-xl border border-gray-100 max-h-[160px] overflow-y-auto">
+                      {attachments.map((att) => (
+                        <div key={att.id} className="flex items-center justify-between gap-3 bg-white p-2 rounded-lg border border-gray-200 text-xs">
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <Paperclip size={14} className="text-gray-400 flex-shrink-0" />
+                            <div className="min-w-0 flex-1">
+                              <p className="font-semibold text-gray-700 truncate" title={att.filename}>
+                                {att.filename}
+                              </p>
+                              <p className="text-[10px] text-gray-400">
+                                {formatSize(att.size)}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            {att.status === 'uploading' && (
+                              <div className="flex items-center gap-1 text-[10px] text-orange-500 font-semibold">
+                                <Loader2 size={12} className="animate-spin" />
+                                <span>Uploading...</span>
+                              </div>
+                            )}
+                            {att.status === 'uploaded' && (
+                              <span className="text-[10px] text-green-600 bg-green-50 px-1.5 py-0.5 rounded font-semibold flex items-center gap-0.5">
+                                <Check size={10} />
+                                Ready
+                              </span>
+                            )}
+                            {att.status === 'error' && (
+                              <span className="text-[10px] text-red-600 bg-red-50 px-1.5 py-0.5 rounded font-semibold flex items-center gap-0.5">
+                                <AlertCircle size={10} />
+                                Error
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveAttachment(att.id)}
+                              className="p-1 hover:bg-red-50 text-gray-400 hover:text-red-500 rounded transition-colors"
+                              title="Remove Attachment"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             ) : (
@@ -522,6 +629,16 @@ function ComposeEmailModal({ student, onClose, onSuccess }: ComposeModalProps) {
                     <span className="text-gray-400 block text-[10px] uppercase font-semibold">Project Name</span>
                     <span className="font-semibold text-gray-700">{projectName}</span>
                   </div>
+                  {attachments.filter(att => att.status === 'uploaded').length > 0 && (
+                    <div className="p-2.5 bg-gray-50 rounded-lg col-span-2">
+                      <span className="text-gray-400 block text-[10px] uppercase font-semibold">Attachments ({attachments.filter(att => att.status === 'uploaded').length})</span>
+                      <ul className="list-disc pl-4 mt-1 font-semibold text-gray-700">
+                        {attachments.filter(att => att.status === 'uploaded').map(att => (
+                          <li key={att.id} className="truncate">{att.filename}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -559,14 +676,19 @@ function ComposeEmailModal({ student, onClose, onSuccess }: ComposeModalProps) {
             </button>
             <button
               onClick={handleSend}
-              disabled={sending}
-              className="px-5 py-2 text-sm font-semibold text-white rounded-lg hover:opacity-95 transition-all flex items-center gap-2"
+              disabled={sending || attachments.some(att => att.status === 'uploading')}
+              className="px-5 py-2 text-sm font-semibold text-white rounded-lg hover:opacity-95 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               style={{ background: BRAND_ORANGE, fontFamily: 'var(--font-michroma)', fontSize: '0.75rem', letterSpacing: '0.05em' }}
             >
               {sending ? (
                 <>
                   <Loader2 size={14} className="animate-spin" />
                   Sending...
+                </>
+              ) : attachments.some(att => att.status === 'uploading') ? (
+                <>
+                  <Loader2 size={13} className="animate-spin" />
+                  Uploading...
                 </>
               ) : (
                 <>

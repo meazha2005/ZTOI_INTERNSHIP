@@ -9,7 +9,7 @@ export default async function (req: Request, res: Response) {
         const adminId = await getAdminId(req);
         if (!adminId) return res.status(401).json({ error: 'Unauthorized' });
 
-        const { studentId, emailSubject, emailBody } = req.body;
+        const { studentId, emailSubject, emailBody, attachments } = req.body;
 
         if (!studentId) {
             return res.status(400).json({ error: 'Student ID is required' });
@@ -42,15 +42,13 @@ export default async function (req: Request, res: Response) {
         });
 
         const fromAddress = process.env.SMTP_USER || 'ztoitech@gmail.com';
-        
-        // Handle optional file attachments
-        const attachments = [];
-        const uploadedFile = (req as any).file;
-        if (uploadedFile) {
-            attachments.push({
-                filename: uploadedFile.originalname,
-                path: uploadedFile.path
-            });
+
+        let mailAttachments: Array<{ filename: string; path: string }> = [];
+        if (attachments && Array.isArray(attachments)) {
+            mailAttachments = attachments.map((att: any) => ({
+                filename: att.filename,
+                path: att.url
+            }));
         }
 
         try {
@@ -59,7 +57,7 @@ export default async function (req: Request, res: Response) {
                 to: student.email,
                 subject: emailSubject,
                 html: emailBody,
-                attachments: attachments.length > 0 ? attachments : undefined
+                attachments: mailAttachments
             });
         } catch (emailErr) {
             console.error('Failed to send completion email:', emailErr);
